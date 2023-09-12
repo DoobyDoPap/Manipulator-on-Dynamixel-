@@ -3,95 +3,72 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/uart.h"
-#include "driver/gpio.h"
+#include "driver/gpio.h"  
 
-#define DYNAMIXEL_UART_NUM    UART_NUM_2
+
+
 #define BAUD_RATE               9600
-#define DYNAMIXEL_TX_PIN        17
-#define DYNAMIXEL_RX_PIN        16
+#define DYNAMIXEL_TX_PIN        GPIO_NUM_1 
+#define DYNAMIXEL_RX_PIN        GPIO_NUM_3   
 
-void init_uart()
-{
+#define GPIO_BIT_MASK          1ULL<<GPIO_NUM_33
+static const gpio_num_t gpio_set_pin = GPIO_NUM_33;    
+ 
 
-const uart_port_t uart_num = UART_NUM_2;
+
+
+void app_main(){ 
+     const uart_port_t DYNAMIXEL_UART_NUM = UART_NUM_0;
+    
 uart_config_t dynamixel_config = {
         .baud_rate = 9600,
         .data_bits = UART_DATA_8_BITS,
         .parity    = UART_PARITY_DISABLE,
         .stop_bits = UART_STOP_BITS_1,
         .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+        .rx_flow_ctrl_thresh = 122,
         
-    };
-    
+    }; 
+   // Setup UART buffered IO with event queue
+const int uart_buffer_size = (1024 * 2);
+QueueHandle_t uart_queue;
+// Install UART driver using an event queue here
+ESP_ERROR_CHECK(uart_driver_install(UART_NUM_2, uart_buffer_size, \
+                                        uart_buffer_size, 10, &uart_queue, 0));
+     
     uart_param_config(DYNAMIXEL_UART_NUM, &dynamixel_config);
-    uart_set_pin(DYNAMIXEL_UART_NUM, 17, 16, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
-    uart_driver_install(DYNAMIXEL_UART_NUM, 1024, 0, 0, NULL, 0);
+   ESP_ERROR_CHECK( uart_set_pin(DYNAMIXEL_UART_NUM, DYNAMIXEL_TX_PIN,  DYNAMIXEL_RX_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE)); 
+    
+    /*ESP_ERROR_CHECK(uart_set_mode(DYNAMIXEL_UART_NUM, UART_MODE_RS485_HALF_DUPLEX)); */
+
+      
+
+    gpio_config_t io_conf;
+	io_conf.intr_type = GPIO_INTR_DISABLE;
+	io_conf.mode = GPIO_MODE_OUTPUT;
+	io_conf.pin_bit_mask = GPIO_BIT_MASK; 
+	io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE; 
+	io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
+	gpio_config(&io_conf); 
+	
+	gpio_set_direction(gpio_set_pin,GPIO_MODE_OUTPUT); 
+      
+     
+     while(1) {   
+          
+          gpio_set_level(gpio_set_pin,0); 
+          uint8_t send_command[]= {0xFF , 0xFF, 0x02 , 0x05 ,0x04 , 0x1E , 0x00 ,0x00 , 0x28};   
+          uart_write_bytes(DYNAMIXEL_TX_PIN, (const char*)send_command,100);  
+          
+          
+           gpio_set_level(gpio_set_pin,1);  
+           uint8_t recieve_commmand[]={};
+           int length=0;  
+           length=uart_read_bytes(DYNAMIXEL_RX_PIN,recieve_commmand,length,100);    
+     
+        if(length!= sizeof(recieve_commmand)){ 
+            printf("error "); 
+        }
+        vTaskDelay(10/ portTICK_PERIOD_MS);
+}  
 }
- 
- // Enable Dynamixel Torque
-uint8_t enable_torque_command[] = {0xFF, 0xFF, 1, 0x05, 0x03, 24, 0x01, 0x00};
-send_to_dynamixel(enable_torque_command, sizeof(enable_torque_command));
-  
-  // Calculate the position value for 30 degrees
-uint16_t goal_position = (uint16_t)((30.0 / 300.0) * (DXL_MAXIMUM_POSITION_VALUE - DXL_MINIMUM_POSITION_VALUE)) + DXL_MINIMUM_POSITION_VALUE;
-
-// Set Goal Position
-uint8_t set_position_command[] = {0xFF, 0xFF, DXL_ID, 0x07, 0x03, 30, goal_position & 0xFF, (goal_position >> 8) & 0xFF, 0x00};
-uart_write_bytes(DYNAMIXEL_UART_NUM, (const char *)set_position_command, sizeof(set_position_command));
-
-    do {
-    // Read present position
-    uint8_t read_position_command[] = {0xFF, 0xFF, 1, 0x04, 0x02, 36, 0x02};
-    send_to_dynamixel(read_position_command, sizeof(read_position_command));
-    receive_from_dynamixel((uint8_t *)&current_position, sizeof(current_position));
-    
-    // Convert the received data to little-endian if needed
-    current_position = (current_position >> 8) | (current_position << 8);
-
-} 
-while (abs(goal_position - current_position) > DXL_MOVING_STATUS_THRESHOLD);
-
-   
-    
- 
-    
- 
-   
-   
-   
-   
-   
-   
-   
-   
-   
-   
-   
-   
-   
-   
-   
-   
-   
-   
-   
-   
-  
-
-    
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
