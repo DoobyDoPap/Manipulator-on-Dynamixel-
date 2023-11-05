@@ -1,0 +1,6 @@
+# Constants
+# Request
+uint8[<=5] motor_ids
+---
+# Response
+int32 torque_mode
